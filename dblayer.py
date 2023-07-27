@@ -16,9 +16,10 @@ def get_uri(contract_address, token_id, owner_address, land=True):
 
     image_links = []
     total_uri = []
-    inputarray = []
-    for i in range(0, len(contract_address)):
-        inputarray.append([contract_address[i], int(token_id[i]), owner_address, land])
+    inputarray = [
+        [contract_address[i], int(token_id[i]), owner_address, land]
+        for i in range(0, len(contract_address))
+    ]
     pool = ThreadPool(len(contract_address))
     # for i in range(0, len(token_id)):
     #     ca = contract_address[i]
@@ -95,8 +96,6 @@ def threadfetch(inp):
             uri = ck_contract.functions.tokenURI(ti).call()
         except:
             uri = ck_contract.functions.uri(ti).call()
-        # name = ck_contract.functions.name().call()
-        name = ""
         checker = False
         try:
             owner = ck_contract.functions.ownerOf(ti).call()
@@ -106,6 +105,8 @@ def threadfetch(inp):
             if land:
                 if symbol == "LAND":
                     return None
+                # name = ck_contract.functions.name().call()
+                name = ""
                 if "LAND" in name:
                     return None
             # if symbol == "LAND" and land:
@@ -130,50 +131,27 @@ def threadfetch(inp):
             if 'ipfs://' in imageurl:
                 imageurl = ipfsurl + imageurl.split("ipfs://ipfs/")[1]
 
-                try:
-                    req = Request(imageurl)
-                    req.add_header('User-Agent', headers.get('User-Agent'))
-                    image = Image.open(urlopen(req, timeout=5))
+            try:
+                req = Request(imageurl)
+                req.add_header('User-Agent', headers.get('User-Agent'))
+                image = Image.open(urlopen(req, timeout=5))
 
-                    width, height = image.size
-                    xjson["height"] = height
-                    xjson["width"] = width
-                    xjson["address"] = ca
-                    xjson["token_id"] = ti
-                    if width == 0 or height == 0:
-                        width = width + 1
-                        height = height + 1
+                width, height = image.size
+                xjson["height"] = height
+                xjson["width"] = width
+                xjson["address"] = ca
+                xjson["token_id"] = ti
+                if width == 0 or height == 0:
+                    width = width + 1
+                    height = height + 1
 
-                    # print(width, height)
-                    imageresult = [imageurl, width, height]
-                    uriresult = xjson
-                except:
-                    traceback.print_exc()
-            else:
-                try:
-                    req = Request(imageurl)
-                    req.add_header('User-Agent', headers.get('User-Agent'))
-                    image = Image.open(urlopen(req, timeout=5))
-                    width, height = image.size
-                    xjson["height"] = height
-                    xjson["width"] = width
-                    xjson["address"] = ca
-                    xjson["token_id"] = ti
-                    if width == 0 or height == 0:
-                        width = width + 1
-                        height = height + 1
-
-                    # print(width, height)
-                    imageresult = [imageurl, width, height]
-                    uriresult = xjson
-                except:
-                    traceback.print_exc()
-
+                # print(width, height)
+                imageresult = [imageurl, width, height]
+                uriresult = xjson
+            except:
+                traceback.print_exc()
             if uriresult != None:
                 return [uriresult, imageresult]
-            else:
-                pass
-                # print("no result")
     except:
         # print(checker, uri, ca, ti)
         traceback.print_exc()
@@ -226,7 +204,7 @@ def get_user_gallery(user_address):
         address = g.get("address")
         token_id = g.get("token_id")
         nft = find_nft(address, token_id)
-        if nft == None:
+        if nft is None:
             nft = threadfetch([address, token_id, "", False])
         else:
             nft = format_nft(nft)
@@ -253,7 +231,7 @@ def get_global_gallery():
         address = g.get("address")
         token_id = g.get("token_id")
         nft = find_nft(address, token_id)
-        if nft == None:
+        if nft is None:
             nft = threadfetch([address, token_id, "", False])
         else:
             nft = format_nft(nft)
@@ -333,7 +311,7 @@ def get_latest_gallery():
 def get_latest_opensea(marker=0):
     contracts = []
     tokenids = []
-    api_url = "https://api.opensea.io/api/v1/events?only_opensea=false&offset=" + str(marker) +"&limit=2000"
+    api_url = f"https://api.opensea.io/api/v1/events?only_opensea=false&offset={str(marker)}&limit=2000"
     x = requests.get(api_url)
     jsun = x.json()
     try:
@@ -342,21 +320,19 @@ def get_latest_opensea(marker=0):
         events = []
     for e in events:
 
-        if e["asset"] != None:
-            tid = e["asset"]["token_id"]
-            ca = e["asset"]["asset_contract"]["address"]
-            contracts.append(ca)
-            tokenids.append(tid)
-        else:
+        if e["asset"] is None:
             print(e)
 
+        else:
+            tid = e["asset"]["token_id"]
+            contracts.append(e["asset"]["asset_contract"]["address"])
+            tokenids.append(tid)
     return contracts, tokenids
 
 
 # function to add to the latest gallery
 def job_function():
     collection = 'NFTGallery'
-    table = 'latest'
     db = client[collection]
     # erase lastest in db
 
@@ -378,15 +354,16 @@ def job_function():
 
     # put into database
     insert_input = []
+    points = 0
     for rc in results_contracts:
         rc['token_id'] = str(rc["token_id"])
         image = rc.get("image")
         token_id = rc.get("token_id")
         address = rc.get("address")
-        points = 0
         nftinput = {'uri': rc, 'image': image, 'token_id': token_id, 'address': address, "points": points}
         insert_input.append(nftinput)
-    if len(insert_input) > 0:
+    if insert_input:
+        table = 'latest'
         db[table].delete_many({})
         db[table].insert_many(insert_input)
     else:
